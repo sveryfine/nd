@@ -5,10 +5,254 @@ const lines = ["CR", "CV", "SP", "HC", "PSW", "VS1", "HM", "VS2", "GA", "PC"];
 const categories = ["Housing", "TPA", "Terminal", "Seal", "Wire", "Bracket", "Connector"];
 
 // State Management
-let currentFilter = { line: 'all', category: 'all', search: '', status: 'all', sortBy: 'none' };
+let currentFilter = { line: 'all', category: 'all', search: '', status: 'all', sortBy: 'time-desc' };
 let isAdmin = false;
 let editingEcnId = null;
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEbV-8ShOalFeSmQDEDNXrLsyEhfvp1b2Czdp0QaAsf2mXc2FfeWMx3dbZFdh4Jl1LKw/exec'; // URL Google Apps Script Web App
+
+// ===== NOTIFICATION SYSTEM =====
+const NOTIF_STORAGE_KEY = 'ecn_notifications';
+const NOTIF_MAX = 50; // Max notifications to keep
+
+function getNotifications() {
+    try {
+        const stored = localStorage.getItem(NOTIF_STORAGE_KEY);
+        return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+}
+
+function saveNotifications(notifs) {
+    // Keep only latest NOTIF_MAX
+    if (notifs.length > NOTIF_MAX) notifs = notifs.slice(0, NOTIF_MAX);
+    localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(notifs));
+}
+
+/**
+ * Add a notification
+ * @param {string} type - 'add' | 'edit' | 'status' | 'delete' | 'lot' | 'category'
+ * @param {string} title - Short title
+ * @param {string} desc - Description detail
+ * @param {object} meta - Optional: { ecnId, itemCode } for click-to-navigate
+ */
+function addNotification(type, title, desc, meta = {}) {
+    const notifs = getNotifications();
+    const notif = {
+        id: Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+        type,
+        title,
+        desc,
+        meta,
+        time: new Date().toISOString(),
+        read: false
+    };
+    notifs.unshift(notif);
+    saveNotifications(notifs);
+    renderNotifBadge();
+    renderNotifList();
+    renderSidebarHistory();
+    showNotifToast(notif);
+    shakeBell();
+}
+
+function renderNotifBadge() {
+    const badge = document.getElementById('notifBadge');
+    if (!badge) return;
+    const notifs = getNotifications();
+    const unreadCount = notifs.filter(n => !n.read).length;
+    if (unreadCount > 0) {
+        badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+        badge.style.display = 'flex';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function shakeBell() {
+    const bell = document.getElementById('notifBell');
+    if (!bell) return;
+    bell.classList.remove('has-notif');
+    void bell.offsetWidth; // Force reflow for re-trigger
+    bell.classList.add('has-notif');
+    setTimeout(() => bell.classList.remove('has-notif'), 700);
+}
+
+function formatNotifTime(isoStr) {
+    const date = new Date(isoStr);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffHr = Math.floor(diffMs / 3600000);
+    const diffDay = Math.floor(diffMs / 86400000);
+
+    if (diffMin < 1) return 'Vừa xong';
+    if (diffMin < 60) return `${diffMin} phút trước`;
+    if (diffHr < 24) return `${diffHr} giờ trước`;
+    if (diffDay < 7) return `${diffDay} ngày trước`;
+    return date.toLocaleDateString('vi-VN');
+}
+
+function getNotifIcon(type) {
+    const icons = {
+        add: 'plus-circle',
+        edit: 'edit-3',
+        status: 'truck',
+        delete: 'trash-2',
+        lot: 'hash',
+        category: 'tag'
+    };
+    return icons[type] || 'bell';
+}
+
+function renderNotifList() {
+    const listEl = document.getElementById('notifList');
+    if (!listEl) return;
+    const notifs = getNotifications();
+
+    if (notifs.length === 0) {
+        listEl.innerHTML = `
+            <div class="notif-empty">
+                <i data-lucide="bell-off" style="width: 32px; height: 32px; opacity: 0.3;"></i>
+                <p>Chưa có thông báo</p>
+            </div>`;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        return;
+    }
+
+    listEl.innerHTML = notifs.map(n => `
+        <div class="notif-item ${n.read ? '' : 'unread'}" data-notif-id="${n.id}" data-ecn-id="${n.meta.ecnId || ''}" data-item-code="${n.meta.itemCode || ''}">
+            <div class="notif-icon type-${n.type}">
+                <i data-lucide="${getNotifIcon(n.type)}" style="width: 18px; height: 18px;"></i>
+            </div>
+            <div class="notif-content">
+                <div class="notif-title">${n.title}</div>
+                <div class="notif-desc">${n.desc}</div>
+                <div class="notif-time">${formatNotifTime(n.time)}</div>
+            </div>
+        </div>
+    `).join('');
+
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+
+    // Click handler for items
+    listEl.querySelectorAll('.notif-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const notifId = item.dataset.notifId;
+            const ecnId = item.dataset.ecnId;
+            const itemCode = item.dataset.itemCode;
+
+            // Mark as read
+            const notifs = getNotifications();
+            const target = notifs.find(n => n.id === notifId);
+            if (target) {
+                target.read = true;
+                saveNotifications(notifs);
+                renderNotifBadge();
+                item.classList.remove('unread');
+            }
+
+            // Navigate to ECN detail if applicable
+            if (ecnId && itemCode) {
+                const ecn = ecns.find(e => String(e.id) === String(ecnId) && String(e.itemCode) === String(itemCode));
+                if (ecn) {
+                    // Close dropdown
+                    const dd = document.getElementById('notifDropdown');
+                    if (dd) dd.classList.remove('open');
+                    showDetail(ecnId, itemCode);
+                }
+            }
+        });
+    });
+}
+
+function showNotifToast(notif) {
+    // Remove any existing toast
+    const existing = document.querySelector('.notif-toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.className = 'notif-toast';
+    toast.innerHTML = `
+        <div class="notif-icon type-${notif.type}">
+            <i data-lucide="${getNotifIcon(notif.type)}" style="width: 16px; height: 16px;"></i>
+        </div>
+        <div class="notif-content">
+            <div class="notif-title">${notif.title}</div>
+            <div class="notif-desc">${notif.desc}</div>
+        </div>
+    `;
+    document.body.appendChild(toast);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+
+    // Auto-remove after animation
+    setTimeout(() => {
+        if (toast.parentNode) toast.remove();
+    }, 4200);
+}
+
+function clearAllNotifications() {
+    localStorage.removeItem(NOTIF_STORAGE_KEY);
+    renderNotifBadge();
+    renderNotifList();
+    renderSidebarHistory();
+}
+
+function markAllNotificationsRead() {
+    const notifs = getNotifications();
+    notifs.forEach(n => n.read = true);
+    saveNotifications(notifs);
+    renderNotifBadge();
+    renderNotifList();
+}
+
+// Sidebar History Timeline
+const HISTORY_MAX_DISPLAY = 15;
+
+function renderSidebarHistory() {
+    const container = document.getElementById('sidebarHistory');
+    if (!container) return;
+    const notifs = getNotifications();
+
+    if (notifs.length === 0) {
+        container.innerHTML = `<div class="history-empty"><p>Chưa có lịch sử</p></div>`;
+        return;
+    }
+
+    const displayNotifs = notifs.slice(0, HISTORY_MAX_DISPLAY);
+
+    container.innerHTML = displayNotifs.map(n => `
+        <div class="history-item" data-ecn-id="${n.meta.ecnId || ''}" data-item-code="${n.meta.itemCode || ''}">
+            <div class="history-dot type-${n.type}">
+                <i data-lucide="${getNotifIcon(n.type)}" style="width: 13px; height: 13px;"></i>
+            </div>
+            <div class="history-info">
+                <div class="history-title">${n.title}</div>
+                <div class="history-time">${formatNotifTime(n.time)}</div>
+            </div>
+        </div>
+    `).join('');
+
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+
+    // Click to navigate
+    container.querySelectorAll('.history-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const ecnId = item.dataset.ecnId;
+            const itemCode = item.dataset.itemCode;
+            if (ecnId && itemCode) {
+                const ecn = ecns.find(e => String(e.id) === String(ecnId) && String(e.itemCode) === String(itemCode));
+                if (ecn) {
+                    // Close sidebar on mobile
+                    const sidebar = document.querySelector('.sidebar');
+                    const overlay = document.getElementById('sidebarOverlay');
+                    if (sidebar) sidebar.classList.remove('open');
+                    if (overlay) overlay.classList.remove('active');
+                    showDetail(ecnId, itemCode);
+                }
+            }
+        });
+    });
+}
+// ===== END NOTIFICATION SYSTEM =====
 
 // DOM Elements
 const ecnGrid = document.getElementById('ecnGrid');
@@ -113,6 +357,9 @@ async function loadData(silent = false) {
         }
 
         if (newEcns.length > 0) {
+            // Đảo ngược mảng từ server (vì Google Sheets thường trả về dữ liệu cũ trước, mới sau ở dưới cùng)
+            newEcns.reverse();
+
             // Smart Merge: Don't let old server data overwrite fresh local changes
             let hasActualChanges = false;
             const now = Date.now();
@@ -130,7 +377,7 @@ async function loadData(silent = false) {
                 if (!serverEcn.lotNumbers) serverEcn.lotNumbers = ["", "", ""];
 
                 // Find local version
-                const localEcn = ecns.find(e => e.id === serverEcn.id && e.itemCode === serverEcn.itemCode);
+                const localEcn = ecns.find(e => String(e.id) === String(serverEcn.id) && String(e.itemCode) === String(serverEcn.itemCode));
 
                 if (localEcn && localEcn._lastLocalUpdate) {
                     const timeSinceUpdate = now - localEcn._lastLocalUpdate;
@@ -164,7 +411,7 @@ async function loadData(silent = false) {
                     const currentCode = detailOverlay.dataset.itemCode;
 
                     if (currentId && currentCode) {
-                        const updatedEcn = ecns.find(e => e.id === currentId && e.itemCode === currentCode);
+                        const updatedEcn = ecns.find(e => String(e.id) === String(currentId) && String(e.itemCode) === String(currentCode));
                         if (updatedEcn) {
                             showDetail(updatedEcn.id, updatedEcn.itemCode);
                         }
@@ -345,12 +592,12 @@ function renderECNs() {
         const matchesCat = currentFilter.category === 'all' || ecn.category.toLowerCase() === currentFilter.category.toLowerCase();
         const searchLower = currentFilter.search.toLowerCase();
         const matchesSearch =
-            (ecn.itemCode?.toLowerCase().includes(searchLower) || false) ||
-            (ecn.id?.toLowerCase().includes(searchLower) || false) ||
-            (ecn.description?.toLowerCase().includes(searchLower) || false) ||
-            (ecn.line?.toLowerCase().includes(searchLower) || false) ||
-            (ecn.category?.toLowerCase().includes(searchLower) || false) ||
-            (ecn.m4e?.toLowerCase().includes(searchLower) || false);
+            (String(ecn.itemCode || '').toLowerCase().includes(searchLower)) ||
+            (String(ecn.id || '').toLowerCase().includes(searchLower)) ||
+            (String(ecn.description || '').toLowerCase().includes(searchLower)) ||
+            (String(ecn.line || '').toLowerCase().includes(searchLower)) ||
+            (String(ecn.category || '').toLowerCase().includes(searchLower)) ||
+            (String(ecn.m4e || '').toLowerCase().includes(searchLower));
 
         // Filter by Status
         let matchesStatus = true;
@@ -430,7 +677,7 @@ function renderECNs() {
 }
 
 function showDetail(id, itemCode) {
-    const ecn = ecns.find(e => e.id === id && e.itemCode === itemCode);
+    const ecn = ecns.find(e => String(e.id) === String(id) && String(e.itemCode) === String(itemCode));
     if (!ecn) return;
 
     // Track current open ECN for auto-sync
@@ -561,17 +808,27 @@ function showDetail(id, itemCode) {
 }
 
 function toggleDelivery(id, index, itemCode) {
-    const ecn = ecns.find(e => e.id === id && e.itemCode === itemCode);
+    const ecn = ecns.find(e => String(e.id) === String(id) && String(e.itemCode) === String(itemCode));
     if (ecn) {
         ecn.deliveries[index] = !ecn.deliveries[index];
         syncData('updateECN', ecn);
         showDetail(id, itemCode); // Re-render detail
         renderECNs();   // Re-render grid
+
+        // Notification
+        const statusText = ecn.deliveries[index] ? 'Đã giao' : 'Chưa giao';
+        const deliveryCount = ecn.deliveries.filter(d => d).length;
+        addNotification(
+            'status',
+            `[${ecn.itemCode}] Lot ${index + 1}: ${statusText}`,
+            `ECN: ${ecn.id} — Tiến độ: ${deliveryCount}/3`,
+            { ecnId: id, itemCode }
+        );
     }
 }
 
 function deleteECN(id, itemCode) {
-    const ecn = ecns.find(e => e.id === id && e.itemCode === itemCode);
+    const ecn = ecns.find(e => String(e.id) === String(id) && String(e.itemCode) === String(itemCode));
     if (!ecn) return;
 
     ecnToDelete = { id, itemCode };
@@ -580,7 +837,7 @@ function deleteECN(id, itemCode) {
 }
 
 function editECN(id, itemCode) {
-    const ecn = ecns.find(e => e.id === id && e.itemCode === itemCode);
+    const ecn = ecns.find(e => String(e.id) === String(id) && String(e.itemCode) === String(itemCode));
     if (!ecn) return;
 
     editingEcnId = id + '|' + itemCode;
@@ -618,11 +875,21 @@ function editECN(id, itemCode) {
 }
 
 function updateLotNumber(id, index, value, itemCode) {
-    const ecn = ecns.find(e => e.id === id && e.itemCode === itemCode);
+    const ecn = ecns.find(e => String(e.id) === String(id) && String(e.itemCode) === String(itemCode));
     if (ecn) {
         ecn.lotNumbers[index] = value;
         syncData('updateECN', ecn);
         renderECNs();
+
+        // Notification
+        if (value) {
+            addNotification(
+                'lot',
+                `[${ecn.itemCode}] Cập nhật ngày Lot ${index + 1}`,
+                `Ngày: "${value}" (ECN: ${ecn.id})`,
+                { ecnId: id, itemCode }
+            );
+        }
     }
 }
 
@@ -673,6 +940,55 @@ function updateImageTransform() {
 }
 
 function setupEventListeners() {
+    // === Notification Bell Controls ===
+    const notifBell = document.getElementById('notifBell');
+    const notifDropdown = document.getElementById('notifDropdown');
+    const notifClearAll = document.getElementById('notifClearAll');
+
+    if (notifBell && notifDropdown) {
+        notifBell.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = notifDropdown.classList.toggle('open');
+            if (isOpen) {
+                // Mark all as read when opening
+                markAllNotificationsRead();
+            }
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.notif-wrapper')) {
+                notifDropdown.classList.remove('open');
+            }
+        });
+    }
+
+    if (notifClearAll) {
+        notifClearAll.addEventListener('click', (e) => {
+            e.stopPropagation();
+            clearAllNotifications();
+        });
+    }
+
+    // Initialize notification badge, list & sidebar history
+    renderNotifBadge();
+    renderNotifList();
+    renderSidebarHistory();
+
+    // === Reload Button ===
+    const reloadBtn = document.getElementById('reloadBtn');
+    if (reloadBtn) {
+        reloadBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            reloadBtn.classList.add('spinning');
+            reloadBtn.style.pointerEvents = 'none';
+            // Small delay for visual feedback before reload
+            setTimeout(() => {
+                location.reload();
+            }, 400);
+        });
+    }
+
     // === Sidebar Sort & Filter Controls ===
 
     // Sort Toggle Buttons (A-Z, Z-A, Newest, Oldest)
@@ -833,6 +1149,9 @@ function setupEventListeners() {
         if (adminCategoryActions) adminCategoryActions.style.display = isAdmin ? 'block' : 'none';
         if (addCatModalBtn) addCatModalBtn.style.display = isAdmin ? 'flex' : 'none';
 
+        const notifClearAllBtn = document.getElementById('notifClearAll');
+        if (notifClearAllBtn) notifClearAllBtn.style.display = isAdmin ? 'block' : 'none';
+
         if (typeof lucide !== 'undefined') lucide.createIcons();
         renderECNs();
         renderCategories();
@@ -878,6 +1197,9 @@ function setupEventListeners() {
 
                 if (catPromptOverlay) catPromptOverlay.style.display = 'none';
                 newCatInput.value = '';
+
+                // Notification
+                addNotification('category', `Thêm phân loại: "${newCat}"`, 'Danh mục mới đã được thêm vào hệ thống', {});
             } else if (categories.includes(newCat)) {
                 window.alert('Phân loại này đã tồn tại!');
             }
@@ -893,21 +1215,34 @@ function setupEventListeners() {
 
     confirmDeleteBtn.addEventListener('click', () => {
         if (categoryToDelete) {
+            const catName = categoryToDelete;
             const index = categories.indexOf(categoryToDelete);
             if (index > -1) {
                 categories.splice(index, 1);
                 syncData('deleteCategory', { name: categoryToDelete });
                 renderCategories();
+
+                // Notification
+                addNotification('category', `Đã xóa phân loại: "${catName}"`, 'Danh mục đã bị xóa khỏi hệ thống', {});
             }
             deleteConfirmOverlay.style.display = 'none';
             categoryToDelete = null;
         } else if (ecnToDelete) {
-            const index = ecns.findIndex(e => e.id === ecnToDelete.id && e.itemCode === ecnToDelete.itemCode);
+            const index = ecns.findIndex(e => String(e.id) === String(ecnToDelete.id) && String(e.itemCode) === String(ecnToDelete.itemCode));
             if (index !== -1) {
+                const deletedEcn = ecns[index];
                 ecns.splice(index, 1);
                 syncData('deleteECN', { id: ecnToDelete.id, itemCode: ecnToDelete.itemCode });
                 detailOverlay.style.display = 'none';
                 renderECNs();
+
+                // Notification
+                addNotification(
+                    'delete',
+                    `[${deletedEcn.itemCode}] Đã xóa ECN`,
+                    `ID: ${deletedEcn.id} — Line: ${deletedEcn.line}`,
+                    {}
+                );
             }
             deleteConfirmOverlay.style.display = 'none';
             ecnToDelete = null;
@@ -962,7 +1297,7 @@ function setupEventListeners() {
             if (editingEcnId) {
                 // Update mode
                 const [oldId, oldCode] = editingEcnId.split('|');
-                const targetEcn = ecns.find(e => e.id === oldId && e.itemCode === oldCode);
+                const targetEcn = ecns.find(e => String(e.id) === String(oldId) && String(e.itemCode) === String(oldCode));
 
                 if (targetEcn) {
                     targetEcn.id = ecnId;
@@ -981,6 +1316,14 @@ function setupEventListeners() {
                     if (detailOverlay.style.display === 'flex') {
                         showDetail(targetEcn.id, targetEcn.itemCode);
                     }
+
+                    // Notification - Edit
+                    addNotification(
+                        'edit',
+                        `[${targetEcn.itemCode}] Đã chỉnh sửa`,
+                        `ID: ${targetEcn.id} — Line: ${targetEcn.line}, Loại: ${targetEcn.category}`,
+                        { ecnId: targetEcn.id, itemCode: targetEcn.itemCode }
+                    );
                 }
                 editingEcnId = null;
             } else {
@@ -1007,6 +1350,23 @@ function setupEventListeners() {
 
                 // Gửi tất cả trong 1 request duy nhất
                 await syncData('addECNs', newEcns);
+
+                // Notification - Add New
+                if (newEcns.length === 1) {
+                    addNotification(
+                        'add',
+                        `[${newEcns[0].itemCode}] Thêm mới ECN`,
+                        `ID: ${ecnId} — Line: ${line}, Loại: ${category}`,
+                        { ecnId, itemCode: newEcns[0].itemCode }
+                    );
+                } else {
+                    addNotification(
+                        'add',
+                        `Thêm ${newEcns.length} mã hàng mới`,
+                        `ID: ${ecnId} — Line: ${line} (${newEcns.map(e => e.itemCode).join(', ')})`,
+                        { ecnId, itemCode: newEcns[0].itemCode }
+                    );
+                }
             }
 
             renderECNs();
