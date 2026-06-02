@@ -12,14 +12,14 @@
     --warning: #f59e0b;
     --danger: #ef4444;
     --admin-purple: #7c3aed;
-    
+
     /* Spacing & Borders */
     --radius-lg: 16px;
     --radius-md: 12px;
     --radius-sm: 8px;
     --glass-bg: rgba(255, 255, 255, 0.8);
     --glass-border: rgba(0, 0, 0, 0.05);
-    
+
     /* Shadow */
     --shadow-soft: 0 10px 30px -5px rgba(0, 0, 0, 0.08);
 }
@@ -42,11 +42,15 @@ body {
 
 /* Hide scrollbars globally */
 * {
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;     /* Firefox */
+    -ms-overflow-style: none;
+    /* IE and Edge */
+    scrollbar-width: none;
+    /* Firefox */
 }
+
 *::-webkit-scrollbar {
-    display: none;             /* Chrome, Safari and Opera */
+    display: none;
+    /* Chrome, Safari and Opera */
 }
 
 /* Layout */
@@ -119,7 +123,8 @@ body {
 
 @media (max-width: 768px) {
     .sidebar {
-        width: 50%; /* Only half screen on mobile */
+        width: 50%;
+        /* Only half screen on mobile */
     }
 }
 
@@ -132,7 +137,8 @@ body {
     height: 100vh;
     background: rgba(0, 0, 0, 0.4);
     backdrop-filter: blur(2px);
-    z-index: 1050; /* Below sidebar (1100) but above everything else */
+    z-index: 1050;
+    /* Below sidebar (1100) but above everything else */
     opacity: 0;
     visibility: hidden;
     transition: all 0.3s ease;
@@ -144,7 +150,9 @@ body {
 }
 
 /* Typography */
-h1, h2, h3 {
+h1,
+h2,
+h3 {
     font-weight: 700;
     letter-spacing: -0.02em;
 }
@@ -157,13 +165,37 @@ h1, h2, h3 {
 
 /* Components */
 .search-container {
-    margin-bottom: 16px;
-    position: relative;
+    position: sticky;
+    top: 56px; /* Chiều cao xấp xỉ của main-header */
+    z-index: 90;
+    background: var(--bg-dark);
+    padding: 24px 0; /* Khoảng cách trên và dưới bằng nhau (24px) để icon nằm giữa chính xác */
+    margin-top: -32px; /* Kéo nền sát lên chạm vào header */
+    margin-bottom: 0;
+}
+
+@media (max-width: 768px) {
+    .search-container {
+        padding: 16px 0;
+        margin-top: -20px; /* Khớp với padding của mobile */
+    }
+}
+
+/* Hiệu ứng mờ dần (fade out) phần bị khoanh đỏ */
+.search-container::after {
+    content: '';
+    position: absolute;
+    bottom: -24px;
+    left: 0;
+    width: 100%;
+    height: 24px;
+    background: linear-gradient(to bottom, var(--bg-dark) 0%, transparent 100%);
+    pointer-events: none;
 }
 
 .search-input {
     width: 100%;
-    padding: 10px 20px;
+    padding: 12px 20px; /* Tăng padding trên/dưới từ 10px lên 12px để tăng chiều cao ~10% */
     padding-left: 42px;
     background: var(--bg-card);
     border: 1px solid var(--bg-accent);
@@ -241,7 +273,7 @@ h1, h2, h3 {
         align-items: center;
         text-align: center;
     }
-    
+
     .detail-header img {
         width: 100% !important;
         max-width: 300px;
@@ -263,9 +295,20 @@ h1, h2, h3 {
     text-transform: uppercase;
 }
 
-.badge-success { background: rgba(34, 197, 94, 0.2); color: #4ade80; }
-.badge-warning { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
-.badge-danger { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+.badge-success {
+    background: rgba(34, 197, 94, 0.2);
+    color: #4ade80;
+}
+
+.badge-warning {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+}
+
+.badge-danger {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
 
 /* Sidebar Items */
 .sidebar-section h3 {
@@ -289,12 +332,14 @@ h1, h2, h3 {
     font-weight: 600;
 }
 
-.line-item:hover, .line-item.active {
+.line-item:hover,
+.line-item.active {
     background: rgba(56, 189, 248, 0.1);
     color: var(--primary);
 }
 
-.line-item i, .line-item svg {
+.line-item i,
+.line-item svg {
     width: 15px !important;
     height: 15px !important;
 }
@@ -347,8 +392,13 @@ h1, h2, h3 {
 }
 
 @keyframes slideIn {
-    from { transform: translateX(100%); }
-    to { transform: translateX(0); }
+    from {
+        transform: translateX(100%);
+    }
+
+    to {
+        transform: translateX(0);
+    }
 }
 
 /* Delivery Tracking UI */
@@ -471,6 +521,7 @@ button:active {
         display: none !important;
     }
 }
+
 /* Sidebar Sub-categories */
 .sub-category-list {
     margin-left: 32px;
@@ -481,7 +532,7 @@ button:active {
     display: none;
 }
 
-.line-item.active + .sub-category-list {
+.line-item.active+.sub-category-list {
     display: block;
 }
 
@@ -509,7 +560,8 @@ button:active {
     font-weight: 700;
 }
 
-.sub-item i, .sub-item svg {
+.sub-item i,
+.sub-item svg {
     width: 10px !important;
     height: 10px !important;
     opacity: 0.6;
@@ -554,9 +606,20 @@ button:active {
 }
 
 @keyframes pulse-sync {
-    0% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.5); opacity: 0.5; }
-    100% { transform: scale(1); opacity: 1; }
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.5);
+        opacity: 0.5;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
 }
 
 /* Status Dot Interactive */
@@ -677,7 +740,8 @@ button:active {
     color: var(--primary);
 }
 
-.sort-toggle-btn i, .sort-toggle-btn svg {
+.sort-toggle-btn i,
+.sort-toggle-btn svg {
     flex-shrink: 0;
 }
 
@@ -733,6 +797,7 @@ button:active {
     color: var(--primary);
     border-color: rgba(2, 132, 199, 0.15);
 }
+
 .status-filter-btn[data-status="all"].active::before {
     background: var(--primary);
     opacity: 1;
@@ -744,6 +809,7 @@ button:active {
     color: #d97706;
     border-color: rgba(245, 158, 11, 0.15);
 }
+
 .status-filter-btn[data-status="incomplete"].active::before {
     background: #f59e0b;
     opacity: 1;
@@ -755,12 +821,14 @@ button:active {
     color: #059669;
     border-color: rgba(16, 185, 129, 0.15);
 }
+
 .status-filter-btn[data-status="complete"].active::before {
     background: #10b981;
     opacity: 1;
 }
 
-.status-filter-btn i, .status-filter-btn svg {
+.status-filter-btn i,
+.status-filter-btn svg {
     flex-shrink: 0;
 }
 
@@ -787,8 +855,13 @@ button:active {
 }
 
 @keyframes reloadSpin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 /* ===== Sidebar Change History ===== */
@@ -931,13 +1004,33 @@ button:active {
 }
 
 @keyframes bellShake {
-    0% { transform: rotate(0); }
-    15% { transform: rotate(12deg); }
-    30% { transform: rotate(-10deg); }
-    45% { transform: rotate(8deg); }
-    60% { transform: rotate(-6deg); }
-    75% { transform: rotate(3deg); }
-    100% { transform: rotate(0); }
+    0% {
+        transform: rotate(0);
+    }
+
+    15% {
+        transform: rotate(12deg);
+    }
+
+    30% {
+        transform: rotate(-10deg);
+    }
+
+    45% {
+        transform: rotate(8deg);
+    }
+
+    60% {
+        transform: rotate(-6deg);
+    }
+
+    75% {
+        transform: rotate(3deg);
+    }
+
+    100% {
+        transform: rotate(0);
+    }
 }
 
 /* Badge */
@@ -963,9 +1056,17 @@ button:active {
 }
 
 @keyframes badgePulse {
-    0% { box-shadow: 0 2px 8px rgba(239, 68, 68, 0.5); }
-    50% { box-shadow: 0 2px 16px rgba(239, 68, 68, 0.8), 0 0 0 4px rgba(239, 68, 68, 0.1); }
-    100% { box-shadow: 0 2px 8px rgba(239, 68, 68, 0.5); }
+    0% {
+        box-shadow: 0 2px 8px rgba(239, 68, 68, 0.5);
+    }
+
+    50% {
+        box-shadow: 0 2px 16px rgba(239, 68, 68, 0.8), 0 0 0 4px rgba(239, 68, 68, 0.1);
+    }
+
+    100% {
+        box-shadow: 0 2px 8px rgba(239, 68, 68, 0.5);
+    }
 }
 
 /* Dropdown */
@@ -996,6 +1097,7 @@ button:active {
         opacity: 0;
         transform: scale(0.92) translateY(-8px);
     }
+
     to {
         opacity: 1;
         transform: scale(1) translateY(0);
@@ -1093,6 +1195,7 @@ button:active {
         opacity: 0;
         transform: translateX(-12px);
     }
+
     to {
         opacity: 1;
         transform: translateX(0);
@@ -1220,6 +1323,7 @@ button:active {
         opacity: 0;
         transform: translateX(100%) scale(0.9);
     }
+
     to {
         opacity: 1;
         transform: translateX(0) scale(1);
@@ -1231,6 +1335,7 @@ button:active {
         opacity: 1;
         transform: translateX(0) scale(1);
     }
+
     to {
         opacity: 0;
         transform: translateX(100%) scale(0.9);
