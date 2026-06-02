@@ -47,6 +47,10 @@ function addNotification(type, title, desc, meta = {}) {
     };
     notifs.unshift(notif);
     saveNotifications(notifs);
+    
+    // Sync notification to server
+    syncData('addNotification', notif);
+    
     renderNotifBadge();
     renderNotifList();
     renderSidebarHistory();
@@ -191,6 +195,7 @@ function showNotifToast(notif) {
 
 function clearAllNotifications() {
     localStorage.removeItem(NOTIF_STORAGE_KEY);
+    syncData('clearNotifications', {});
     renderNotifBadge();
     renderNotifList();
     renderSidebarHistory();
@@ -348,12 +353,54 @@ async function loadData(silent = false) {
 
         let newEcns = [];
         let newCats = null;
+        let newNotifs = null;
 
         if (Array.isArray(serverData)) {
             newEcns = serverData;
         } else if (serverData && serverData.ecns) {
             newEcns = serverData.ecns;
             newCats = serverData.categories;
+            newNotifs = serverData.notifications;
+        }
+
+        // --- SYNC THÔNG BÁO TỪ SERVER ---
+        if (newNotifs && Array.isArray(newNotifs)) {
+            const localNotifs = getNotifications();
+            const localIds = new Set(localNotifs.map(n => n.id));
+            
+            // Server trả về từ cũ đến mới, reverse để lấy mới nhất lên đầu
+            const serverNotifsReversed = [...newNotifs].reverse();
+            
+            // Tìm thông báo từ server mà local chưa có
+            const newFromServer = serverNotifsReversed.filter(n => n.id && !localIds.has(n.id));
+            
+            if (newFromServer.length > 0) {
+                localNotifs.unshift(...newFromServer);
+                saveNotifications(localNotifs);
+                
+                renderNotifBadge();
+                renderNotifList();
+                renderSidebarHistory();
+                
+                // Chỉ hiện toast & rung chuông nếu có thông báo mới (lấy cái đầu tiên)
+                showNotifToast(newFromServer[0]);
+                shakeBell();
+            }
+            
+            // Xử lý trường hợp Admin xóa lịch sử (trên server rỗng mà local có dữ liệu cũ)
+            // (Chỉ xóa nếu local có thông báo nhưng server không có cái nào)
+            if (serverNotifsReversed.length === 0 && localNotifs.length > 0) {
+                // Ngoại trừ các thông báo vừa tạo ở local chưa kịp lên server (trong vòng 10 giây qua)
+                const now = Date.now();
+                const hasRecentLocal = localNotifs.some(n => (now - new Date(n.time).getTime()) < 10000);
+                
+                if (!hasRecentLocal) {
+                    localStorage.removeItem(NOTIF_STORAGE_KEY);
+                    renderNotifBadge();
+                    renderNotifList();
+                    renderSidebarHistory();
+                }
+            }
         }
 
         if (newEcns.length > 0) {
